@@ -1,0 +1,4 @@
+# requirements.txt
+django
+djangorestframework
+djangorestframework-simplejwt
