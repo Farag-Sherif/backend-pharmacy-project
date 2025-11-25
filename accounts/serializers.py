@@ -11,24 +11,27 @@ class RegistrationSerializer(serializers.ModelSerializer):
         style={'input_type': 'password'}
     )
 
+
     class Meta:
         model = User
-        fields = ('username', 'password', 'email', 'first_name', 'last_name')
+        fields = ('email', 'password', 'first_name', 'last_name')  # أزلت username من هنا
 
     def create(self, validated_data):
         role = self.context['role']
         is_approved = self.context['is_approved']
 
+        # إنشاء username تلقائياً من الإيميل
+        username = validated_data['email'].split('@')[0] 
+
         user = User.objects.create_user(
-            username=validated_data['username'],
+            username=username,  # يُنشأ تلقائياً
             password=validated_data['password'],
-            email=validated_data.get('email', ''),
+            email=validated_data['email'],
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', ''),
             role=role,
             is_approved=is_approved
         )
-
         if role == User.Role.PATIENT:
             PatientProfile.objects.create(user=user)
         elif role == User.Role.DOCTOR:

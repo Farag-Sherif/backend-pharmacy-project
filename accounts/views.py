@@ -14,7 +14,7 @@ class PatientRegistrationView(generics.CreateAPIView):
     def get_serializer_context(self):
         return {
             'request': self.request,
-            'format': self.format_json,
+            # 'format': self.format_json,
             'view': self,
             'role': User.Role.PATIENT,
             'is_approved': True  
@@ -28,7 +28,7 @@ class DoctorRegistrationView(generics.CreateAPIView):
     def get_serializer_context(self):
         return {
             'request': self.request,
-            'format': self.format_json,
+            # 'format': self.format_json,
             'view': self,
             'role': User.Role.DOCTOR,
             'is_approved': False 
@@ -42,7 +42,7 @@ class PharmacyRegistrationView(generics.CreateAPIView):
     def get_serializer_context(self):
         return {
             'request': self.request,
-            'format': self.format_json,
+            # 'format': self.format_json,
             'view': self,
             'role': User.Role.PHARMACY,
             'is_approved': False 
@@ -56,7 +56,7 @@ class LabRegistrationView(generics.CreateAPIView):
     def get_serializer_context(self):
         return {
             'request': self.request,
-            'format': self.format_json,
+            # 'format': self.format_json,
             'view': self,
             'role': User.Role.LAB,
             'is_approved': False 
