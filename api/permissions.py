@@ -49,3 +49,16 @@ class IsPharmacy(BasePermission):
             request.user.is_authenticated and 
             request.user.role == User.Role.PHARMACY
         )
+
+class IsAdmin(BasePermission):
+    """
+    Permission for admin users only
+    """
+    def has_permission(self, request, view):
+        return bool(
+            request.user and 
+            request.user.is_authenticated and 
+            (request.user.role == User.Role.ADMIN or 
+             request.user.is_staff or 
+             request.user.is_superuser)
+        )

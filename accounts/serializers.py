@@ -1,6 +1,8 @@
 # accounts/serializers.py
 from rest_framework import serializers
-from .models import Specialization, User, PatientProfile, DoctorProfile, PharmacyProfile, LaboratoryProfile
+from .models import (Specialization, User, PatientProfile, DoctorProfile, 
+                      PharmacyProfile, LaboratoryProfile, RadiologyProfile,
+                      WorkingHours, DoctorAvailability)
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
@@ -40,6 +42,8 @@ class RegistrationSerializer(serializers.ModelSerializer):
             PharmacyProfile.objects.create(user=user)
         elif role == User.Role.LAB:
             LaboratoryProfile.objects.create(user=user)
+        elif role == User.Role.RADIOLOGY:
+            RadiologyProfile.objects.create(user=user)
         
         return user
     
@@ -68,14 +72,14 @@ class SpecializationSerializer(serializers.ModelSerializer):
 class PatientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientProfile
-        fields = ('medical_history', 'date_of_birth')
+        fields = ('medical_history', 'date_of_birth', 'gender', 'address')
 
 class DoctorProfileSerializer(serializers.ModelSerializer):
     specialization = SpecializationSerializer(read_only=True)
     
     class Meta:
         model = DoctorProfile
-        fields = ('specialization', 'bio', 'consultation_fee', 'license_number')
+        fields = ('specialization', 'bio', 'consultation_fee', 'license_number', 'experience', 'address')
 
 class PharmacyProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -106,5 +110,188 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return PharmacyProfileSerializer(obj.pharmacy_profile).data
         elif obj.role == User.Role.LAB and hasattr(obj, 'lab_profile'):
             return LaboratoryProfileSerializer(obj.lab_profile).data
+        elif obj.role == User.Role.RADIOLOGY and hasattr(obj, 'radiology_profile'):
+            return RadiologyProfileSerializer(obj.radiology_profile).data
         
         return None
+
+class RadiologyProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RadiologyProfile
+        fields = ('address', 'license_number', 'phone_number')
+
+class WorkingHoursSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkingHours
+        fields = ('id', 'owner_id', 'owner_type', 'day', 'open_time', 'close_time')
+
+class DoctorAvailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorAvailability
+        fields = ('id', 'day', 'start_time', 'end_time')
+
+class DoctorCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating/updating doctors (admin use)
+    """
+    password = serializers.CharField(write_only=True, required=False)
+    specialization_name = serializers.CharField(write_only=True, required=False)
+    experience = serializers.IntegerField(required=False)
+    fee = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, source='doctor_profile.consultation_fee')
+    description = serializers.CharField(required=False, source='doctor_profile.bio')
+    license_number = serializers.CharField(required=False, source='doctor_profile.license_number')
+    address = serializers.CharField(required=False)
+    
+    class Meta:
+        model = User
+        fields = ('id', 'first_name', 'last_name', 'email', 'password', 'phone', 
+                  'address', 'specialization_name', 'experience', 'fee', 'description', 'license_number')
+    
+    def create(self, validated_data):
+        # Extract nested data
+        profile_data = validated_data.pop('doctor_profile', {})
+        specialization_name = validated_data.pop('specialization_name', None)
+        
+        # Create username from email
+        username = validated_data['email'].split('@')[0]
+        
+        # Create user
+        user = User.objects.create_user(
+            username=username,
+            password=validated_data.pop('password'),
+            email=validated_data['email'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', ''),
+            phone=validated_data.get('phone', ''),
+            role=User.Role.DOCTOR,
+            is_approved=False
+        )
+        
+        # Get or create specialization
+        specialization = None
+        if specialization_name:
+            specialization, _ = Specialization.objects.get_or_create(name=specialization_name)
+        
+        # Create doctor profile
+        DoctorProfile.objects.create(
+            user=user,
+            specialization=specialization,
+            bio=profile_data.get('bio', ''),
+            consultation_fee=profile_data.get('consultation_fee'),
+            license_number=profile_data.get('license_number'),
+            experience=validated_data.get('experience', 0),
+            address=validated_data.get('address', '')
+        )
+        
+        return user
+
+class PharmacyCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating pharmacies (admin use)
+    """
+    name = serializers.CharField(source='username')
+    password = serializers.CharField(write_only=True)
+    license_number = serializers.CharField(write_only=True)
+    address = serializers.CharField(write_only=True)
+    phone = serializers.CharField(required=False)
+    
+    class Meta:
+        model = User
+        fields = ('id', 'name', 'email', 'password', 'phone', 'address', 'license_number')
+    
+    def create(self, validated_data):
+        license_number = validated_data.pop('license_number')
+        address = validated_data.pop('address')
+        phone_number = validated_data.pop('phone', '')
+        
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password'],
+            email=validated_data['email'],
+            phone=phone_number,
+            role=User.Role.PHARMACY,
+            is_approved=False
+        )
+        
+        PharmacyProfile.objects.create(
+            user=user,
+            license_number=license_number,
+            address=address,
+            phone_number=phone_number
+        )
+        
+        return user
+
+class LaboratoryCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating laboratories (admin use)
+    """
+    name = serializers.CharField(source='username')
+    password = serializers.CharField(write_only=True)
+    license_number = serializers.CharField(write_only=True)
+    address = serializers.CharField(write_only=True)
+    phone = serializers.CharField(required=False)
+    
+    class Meta:
+        model = User
+        fields = ('id', 'name', 'email', 'password', 'phone', 'address', 'license_number')
+    
+    def create(self, validated_data):
+        license_number = validated_data.pop('license_number')
+        address = validated_data.pop('address')
+        phone_number = validated_data.pop('phone', '')
+        
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password'],
+            email=validated_data['email'],
+            phone=phone_number,
+            role=User.Role.LAB,
+            is_approved=False
+        )
+        
+        LaboratoryProfile.objects.create(
+            user=user,
+            license_number=license_number,
+            address=address,
+            phone_number=phone_number
+        )
+        
+        return user
+
+class RadiologyCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating radiology centers (admin use)
+    """
+    name = serializers.CharField(source='username')
+    password = serializers.CharField(write_only=True)
+    license_number = serializers.CharField(write_only=True)
+    address = serializers.CharField(write_only=True)
+    phone = serializers.CharField(required=False)
+    
+    class Meta:
+        model = User
+        fields = ('id', 'name', 'email', 'password', 'phone', 'address', 'license_number')
+    
+    def create(self, validated_data):
+        license_number = validated_data.pop('license_number')
+        address = validated_data.pop('address')
+        phone_number = validated_data.pop('phone', '')
+        
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password'],
+            email=validated_data['email'],
+            phone=phone_number,
+            role=User.Role.RADIOLOGY,
+            is_approved=False
+        )
+        
+        RadiologyProfile.objects.create(
+            user=user,
+            license_number=license_number,
+            address=address,
+            phone_number=phone_number
+        )
+        
+        return user
