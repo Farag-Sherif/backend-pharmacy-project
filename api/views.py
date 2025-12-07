@@ -35,10 +35,23 @@ class DoctorListView(generics.ListAPIView):
     
     permission_classes = [permissions.IsAuthenticated]
 
-class AppointmentCreateView(generics.CreateAPIView):
-    
+class AppointmentCreateView(generics.ListCreateAPIView):
+    """
+    GET: List patient's reservations
+    POST: Create a new reservation
+    """
     serializer_class = AppointmentCreateSerializer
     permission_classes = [permissions.IsAuthenticated, IsPatient]
+
+    def get_queryset(self):
+        return Appointment.objects.filter(
+            patient=self.request.user
+        ).select_related('doctor').order_by('-created_at')
+    
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return AppointmentListSerializer
+        return AppointmentCreateSerializer
 
     def perform_create(self, serializer):
         serializer.save(
@@ -139,3 +152,53 @@ class LaboratoryDetailView(generics.RetrieveAPIView):
     
     serializer_class = LaboratoryDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+class RadiologyListView(generics.ListAPIView):
+    """
+    GET /radiologies
+    List all approved radiology centers
+    """
+    queryset = User.objects.filter(
+        role=User.Role.RADIOLOGY,
+        is_approved=True
+    ).select_related('radiology_profile')
+    
+    serializer_class = LaboratoryDetailSerializer  # Same structure as lab
+    permission_classes = [permissions.IsAuthenticated]
+
+class ReservationCancelView(generics.UpdateAPIView):
+    """
+    PUT /patient/reservations/{id}/cancel
+    Cancel a reservation (patient only)
+    """
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+    queryset = Appointment.objects.all()
+    
+    def update(self, request, *args, **kwargs):
+        from rest_framework.response import Response
+        from rest_framework import status as http_status
+        
+        reservation = self.get_object()
+        
+        # Check if reservation belongs to the patient
+        if reservation.patient != request.user:
+            return Response(
+                {"error": "You can only cancel your own reservations"},
+                status=http_status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if reservation can be canceled
+        if reservation.status in [Appointment.Status.CANCELED, Appointment.Status.COMPLETED]:
+            return Response(
+                {"error": "This reservation cannot be canceled"},
+                status=http_status.HTTP_403_FORBIDDEN
+            )
+        
+        # Cancel the reservation
+        reservation.status = Appointment.Status.CANCELED
+        reservation.save()
+        
+        return Response(
+            {"success": True, "message": "Reservation canceled successfully"},
+            status=http_status.HTTP_200_OK
+        )

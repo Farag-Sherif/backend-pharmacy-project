@@ -6,9 +6,9 @@ from .models import Appointment
 
 @admin.register(Appointment)
 class AppointmentAdmin(admin.ModelAdmin):
-    list_display = ('patient', 'get_provider_name', 'appointment_time', 'status')
+    list_display = ('patient', 'get_provider_name', 'date', 'time', 'status')
     
-    list_filter = ('status', 'appointment_time', 'doctor', 'laboratory')
+    list_filter = ('status', 'date', 'doctor')
     
     search_fields = ('patient__username',)
     
@@ -17,7 +17,5 @@ class AppointmentAdmin(admin.ModelAdmin):
     def get_provider_name(self, obj):
         if obj.doctor:
             return str(obj.doctor)
-        if obj.laboratory:
-            return str(obj.laboratory)
         return "N/A"
-    get_provider_name.short_description = 'Provider (Doctor/Lab)' # اسم العمود
+    get_provider_name.short_description = 'Provider (Doctor)'
